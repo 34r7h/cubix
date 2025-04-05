@@ -20,8 +20,7 @@ let tx1 = {
     meta: {
         type: 'genesis',
         parameters: {
-            txtypes: ['asset', 'identity', 'state'],
-            
+            txtypes: ['genesis', 'asset', 'identity', 'state'],
         }
         
     }
