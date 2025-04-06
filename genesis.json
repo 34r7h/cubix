@@ -1,0 +1,13 @@
+{
+    "0":{
+        "blocks": [], // flat stack of txs
+        "faces": [[]], // level 0 faces
+        "cubes": [[]] // level 0 cubes
+    },
+    "1":{
+        "blocks": [], // flat stack of level 0 cubes
+        "faces": [[], []], // level 1 faces
+        "cubes": [[],[]] // level 1 cubes
+    }
+    ... and so on infinitely
+}
