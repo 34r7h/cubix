@@ -2,7 +2,7 @@
 //! primarily for deriving P1 and P2 matrix components in MAYO.
 
 use aes::Aes128;
-use aes::cipher::{KeyInit, generic_array::GenericArray, StreamCipher, KeyIvInit};
+use aes::cipher::{generic_array::GenericArray, StreamCipher, KeyIvInit}; // Removed KeyInit
 use ctr::Ctr128BE; // Using Big Endian as is common in cryptographic contexts.
 use crate::types::SeedPK;
 use crate::params::MayoVariantParams;

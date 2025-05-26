@@ -36,7 +36,7 @@ pub fn open(cpk: &CompactPublicKey, signed_message: &[u8], params_enum: &MayoPar
     let params = params_enum.variant();
     
     // Determine signature length: s_bytes_len (n elements) + salt_bytes
-    let s_bytes_len = params_enum.bytes_for_gf16_elements(params.n);
+    let s_bytes_len = MayoParams::bytes_for_gf16_elements(params.n);
     let expected_sig_len = s_bytes_len + params.salt_bytes;
 
     if signed_message.len() < expected_sig_len {
@@ -67,7 +67,7 @@ pub fn open(cpk: &CompactPublicKey, signed_message: &[u8], params_enum: &MayoPar
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::params::MayoParams;
+    use crate::params::MayoParams; // This is MayoParams enum type itself
     // Message and Signature types are already imported if needed.
 
     #[test]
@@ -112,7 +112,7 @@ mod tests {
         
         // Create a dummy "signed message"
         // Signature part: s_bytes (n elements) + salt_bytes
-        let s_bytes_len = params_enum.bytes_for_gf16_elements(params_enum.n());
+        let s_bytes_len = MayoParams::bytes_for_gf16_elements(params_enum.variant().n); // Corrected call
         let expected_sig_len = s_bytes_len + params_enum.salt_bytes();
         
         let dummy_sig_bytes = vec![0u8; expected_sig_len];
@@ -137,7 +137,7 @@ mod tests {
         let params_enum = MayoParams::mayo1();
         let (_csk, cpk) = keypair(&params_enum).expect("keypair generation failed");
         
-        let s_bytes_len = params_enum.bytes_for_gf16_elements(params_enum.n());
+        let s_bytes_len = MayoParams::bytes_for_gf16_elements(params_enum.variant().n); // Corrected call
         let expected_sig_len = s_bytes_len + params_enum.salt_bytes();
         
         let short_signed_message = vec![0u8; expected_sig_len - 1];
