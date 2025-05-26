@@ -30,12 +30,12 @@ pub fn compact_key_gen(params_enum: &MayoParams) -> Result<(CompactSecretKey, Co
     //    (seed_pk || O_bytes) = SHAKE256(seed_sk, params.pk_seed_bytes + params.O_bytes)
     //    The shake256_xof_derive_pk_seed_and_o function handles this logic.
     //    O_bytes itself isn't directly part of the simplified csk/cpk here, but is derived.
-    let (seedpk, _o_bytes) = shake256_xof_derive_pk_seed_and_o(&seedsk, params);
+    let (seedpk, _o_bytes) = shake256_xof_derive_pk_seed_and_o(&seedsk, params_enum);
 
     // 3. Derive P3_bytes from seed_pk using SHAKE256
     //    P3_bytes = SHAKE256(seed_pk, params.P3_bytes)
     //    The shake256_xof_derive_p3 function handles this.
-    let p3_bytes = shake256_xof_derive_p3(&seedpk, params);
+    let p3_bytes = shake256_xof_derive_p3(&seedpk, params_enum);
     
     // Ensure derived P3_bytes has the expected length as defined in params.
     // This check is good practice, though shake256_xof_derive_p3 should already produce correct length.
@@ -66,7 +66,7 @@ pub fn expand_sk(csk: &CompactSecretKey, params_enum: &MayoParams) -> Result<Exp
     let seedsk = SeedSK(csk.0.clone()); // csk.0 is Vec<u8>
 
     // 2. Derive seedpk and O_bytes from seedsk
-    let (seedpk, o_bytes) = shake256_xof_derive_pk_seed_and_o(&seedsk, params);
+    let (seedpk, o_bytes) = shake256_xof_derive_pk_seed_and_o(&seedsk, params_enum);
     if o_bytes.len() != params.o_bytes {
         return Err("O_bytes length mismatch during derivation");
     }
@@ -118,7 +118,7 @@ pub fn expand_sk(csk: &CompactSecretKey, params_enum: &MayoParams) -> Result<Exp
     
     // Optional: Check l_all_bytes length against expected (derived from params)
     let expected_l_elements = params.m * (params.n - params.o) * (params.n - params.o);
-    let expected_l_bytes_len = params_enum.bytes_for_gf16_elements(expected_l_elements);
+    let expected_l_bytes_len = MayoParams::bytes_for_gf16_elements(expected_l_elements);
     if l_all_bytes.len() != expected_l_bytes_len {
         // This can be an internal consistency check.
         // For now, let's log if there's a mismatch or return Err.
@@ -268,7 +268,7 @@ mod tests {
         
         // Re-derive o_bytes for comparison (as done in expand_sk)
         let seedsk_for_check = SeedSK(csk.0.clone());
-        let (_seedpk_for_check, o_bytes_derived) = shake256_xof_derive_pk_seed_and_o(&seedsk_for_check, params_variant);
+        let (_seedpk_for_check, o_bytes_derived) = shake256_xof_derive_pk_seed_and_o(&seedsk_for_check, params_enum);
         assert_eq!(esk_o_bytes, &o_bytes_derived[..], "ESK o_bytes part mismatch");
 
         // Verify P1_all_bytes part
@@ -283,7 +283,7 @@ mod tests {
         // Verify L_all_bytes length
         let l_bytes_start = p1_bytes_end;
         let num_l_elements = params_variant.m * (params_variant.n - params_variant.o) * (params_variant.n - params_variant.o);
-        let expected_l_bytes_len = params_enum.bytes_for_gf16_elements(num_l_elements);
+        let expected_l_bytes_len = MayoParams::bytes_for_gf16_elements(num_l_elements);
         
         assert_eq!(esk.0.len(), params_variant.sk_seed_bytes + params_variant.o_bytes + params_variant.p1_bytes + expected_l_bytes_len,
                    "Total ESK length mismatch");

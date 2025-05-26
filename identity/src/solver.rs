@@ -1,7 +1,7 @@
 //! Implements a linear system solver over GF(16) using Gaussian elimination.
 
 use crate::types::{GFElement, GFMatrix, GFVector};
-use crate::gf::{gf16_add, gf16_mul, gf16_pow, gf16_sub}; // gf16_sub is same as gf16_add
+use crate::gf::{gf16_mul, gf16_pow, gf16_sub}; // gf16_sub is same as gf16_add; removed gf16_add as unused
 // Note: GFMatrix type is from crate::types, its methods are in crate::matrix
 // We'll use the struct directly and its public fields (data, rows, cols)
 // and helper methods like `get_unsafe`, `set_val` defined in `crate::matrix`.

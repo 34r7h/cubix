@@ -1,6 +1,6 @@
 //! Implements MAYO.Verify (Algorithm 9).
 
-use crate::types::{ExpandedPublicKey, Message, Signature, GFVector, MessageDigest, Salt, GFMatrix, GFElement};
+use crate::types::{ExpandedPublicKey, Message, Signature, GFVector, Salt, GFMatrix}; // Removed MessageDigest, GFElement
 use crate::params::{MayoParams, MayoVariantParams};
 use crate::hash::{shake256_digest, shake256_derive_target_t};
 use crate::codec::{decode_p1_matrices, decode_p2_matrices, decode_p3_matrices, decode_s_vector, decode_gf_elements};
@@ -108,7 +108,7 @@ pub fn verify_signature(epk: &ExpandedPublicKey, message: &Message, signature: &
     let p3_matrices = decode_p3_matrices(p3_all_bytes, params)?;
 
     // 2. Decode signature into salt and s_vector
-    let s_bytes_len = params_enum.bytes_for_gf16_elements(params.n);
+    let s_bytes_len = MayoParams::bytes_for_gf16_elements(params.n);
     if signature.0.len() != s_bytes_len + params.salt_bytes {
         return Err("Signature has incorrect length");
     }
@@ -119,10 +119,10 @@ pub fn verify_signature(epk: &ExpandedPublicKey, message: &Message, signature: &
     let salt = Salt(salt_bytes_slice.to_vec());
 
     // 3. Hash message M to M_digest
-    let m_digest = shake256_digest(&message.0, params);
+    let m_digest = shake256_digest(&message.0, params_enum);
 
     // 4. Derive target vector t
-    let t_bytes = shake256_derive_target_t(&m_digest, &salt, params);
+    let t_bytes = shake256_derive_target_t(&m_digest, &salt, params_enum);
     let t_vector = decode_gf_elements(&t_bytes, params.m)?;
 
     // 5. Compute y = P*(s)
@@ -142,7 +142,10 @@ pub fn verify_signature(epk: &ExpandedPublicKey, message: &Message, signature: &
 mod tests {
     use super::*;
     use crate::params::MayoParams;
-    use crate::types::{ExpandedPublicKey as EpkTypeForTest, Signature as SigTypeForTest, Message as MsgTypeForTest, GFElement};
+    // GFElement removed from here as it's only used in create_dummy_signature for GFElement(0) which can be Self(0) or just 0 if type inference works.
+    // However, GFVector is Vec<GFElement>, so GFElement itself might still be needed if GFVector is constructed with GFElement explicitly.
+    // Let's check if the compiler complains after removing GFElement from the main import. It's used in dummy_s_vector.
+    use crate::types::{ExpandedPublicKey as EpkTypeForTest, Signature as SigTypeForTest, Message as MsgTypeForTest, GFElement}; // Re-added GFElement for test
     use crate::keygen::{compact_key_gen, expand_pk}; 
     use crate::codec::encode_s_vector; 
 
@@ -154,7 +157,7 @@ mod tests {
     fn create_dummy_signature(params_enum: &MayoParams) -> SigTypeForTest {
         let params = params_enum.variant();
         let s_len = params.n;
-        let s_bytes_len = params_enum.bytes_for_gf16_elements(s_len);
+        let s_bytes_len = MayoParams::bytes_for_gf16_elements(s_len);
         let salt_len = params.salt_bytes;
 
         let dummy_s_vector: GFVector = vec![GFElement(0); s_len];

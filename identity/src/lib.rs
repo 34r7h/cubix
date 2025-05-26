@@ -1,5 +1,5 @@
-use wasm_bindgen::prelude::*; // Keep for future Wasm compatibility
-use blake2::{Blake2b512, Digest}; // Keep for now, might be used for hashing in MAYO
+// use wasm_bindgen::prelude::*; // Removed as per compiler warning
+// use blake2::{Blake2b512, Digest}; // Removed as per compiler warning
 
 pub mod params;
 pub mod types;
