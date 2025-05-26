@@ -17,7 +17,7 @@ pub fn shake256_digest(input: &[u8], params: &MayoParams) -> MessageDigest {
     let mut hasher = Shake256::default();
     hasher.update(input);
     let mut reader = hasher.finalize_xof();
-    let mut digest_bytes_vec = vec![0u8; params.digest_bytes];
+    let mut digest_bytes_vec = vec![0u8; params.digest_bytes()];
     reader.read(&mut digest_bytes_vec);
     MessageDigest(digest_bytes_vec)
 }
@@ -36,10 +36,10 @@ pub fn shake256_xof_derive_pk_seed_and_o(seed: &SeedSK, params: &MayoParams) -> 
     hasher.update(&seed.0);
     let mut reader = hasher.finalize_xof();
     
-    let mut seedpk_bytes_vec = vec![0u8; params.pk_seed_bytes];
+    let mut seedpk_bytes_vec = vec![0u8; params.pk_seed_bytes()];
     reader.read(&mut seedpk_bytes_vec);
     
-    let mut o_bytes_vec = vec![0u8; params.O_bytes]; 
+    let mut o_bytes_vec = vec![0u8; params.o_bytes()]; 
     reader.read(&mut o_bytes_vec);
     
     (SeedPK(seedpk_bytes_vec), o_bytes_vec)
@@ -58,7 +58,7 @@ pub fn shake256_xof_derive_p3(seed_pk: &SeedPK, params: &MayoParams) -> Vec<u8> 
     let mut hasher = Shake256::default();
     hasher.update(&seed_pk.0);
     let mut reader = hasher.finalize_xof();
-    let mut p3_bytes_vec = vec![0u8; params.P3_bytes];
+    let mut p3_bytes_vec = vec![0u8; params.p3_bytes()];
     reader.read(&mut p3_bytes_vec);
     p3_bytes_vec
 }
@@ -83,7 +83,7 @@ pub fn shake256_derive_target_t(m_digest: &MessageDigest, salt: &Salt, params: &
     // Each element of t is in GF(q). For q=16, each element is 4 bits.
     // The target vector t has m elements. So, m * 4 bits = m/2 bytes.
     // If m is odd, we need (m+1)/2 bytes to store m nibbles.
-    let target_len_bytes = params.bytes_for_gf16_elements(params.m);
+    let target_len_bytes = MayoParams::bytes_for_gf16_elements(params.m());
     let mut t_bytes_vec = vec![0u8; target_len_bytes];
     reader.read(&mut t_bytes_vec);
     t_bytes_vec

@@ -1,18 +1,19 @@
 //! Implements MAYO.Sign (Algorithm 8).
 
 use crate::types::{
-    ExpandedSecretKey, Message, Signature, GFVector, Salt, MessageDigest, SeedSK,
+    ExpandedSecretKey, Message, Signature, GFVector, Salt, SeedSK, // Removed MessageDigest
     GFElement // For random vinegar variables
 };
 use crate::params::{MayoParams, MayoVariantParams};
 use crate::hash::{shake256_digest, shake256_derive_target_t, shake256_xof_derive_pk_seed_and_o, shake256_xof_derive_p3};
-use crate::aes_ctr::{derive_p1_bytes, derive_p2_bytes};
+use crate::aes_ctr::derive_p2_bytes; // Removed derive_p1_bytes
 use crate::codec::{
     decode_o_matrix, decode_p1_matrices, decode_p2_matrices, decode_l_matrices,
-    decode_gf_elements, encode_s_vector
+    decode_gf_elements, encode_s_vector, decode_p3_matrices
 };
+use crate::types::GFMatrix;
 use crate::matrix::{
-    GFMatrix, matrix_sub_vectors_gfvector, matrix_symmetrize, 
+    matrix_sub_vectors_gfvector, matrix_symmetrize, 
     matrix_vec_mul_transpose_gfvector, vector_dot_product
 };
 use crate::solver::solve_linear_system;
@@ -108,7 +109,7 @@ pub fn sign_message(esk: &ExpandedSecretKey, message: &Message, params_enum: &Ma
     let p1_all_bytes_len = params.p1_bytes;
     // L_all_bytes length is the rest, or can be calculated:
     let num_l_elements = params.m * (params.n - params.o) * (params.n - params.o);
-    let l_all_bytes_len_expected = params_enum.bytes_for_gf16_elements(num_l_elements);
+    let l_all_bytes_len_expected = MayoParams::bytes_for_gf16_elements(num_l_elements);
 
     if esk.0.len() != seedsk_bytes_len + o_bytes_len + p1_all_bytes_len + l_all_bytes_len_expected {
         return Err("Expanded secret key has incorrect total length based on components");
@@ -126,7 +127,7 @@ pub fn sign_message(esk: &ExpandedSecretKey, message: &Message, params_enum: &Ma
     }
 
     // Re-derive seedpk to get P2_bytes and P3_bytes (P1_bytes also re-derived for consistency, though available in esk)
-    let (seedpk, derived_o_bytes) = shake256_xof_derive_pk_seed_and_o(&seedsk, params);
+    let (seedpk, derived_o_bytes) = shake256_xof_derive_pk_seed_and_o(&seedsk, params_enum);
     if derived_o_bytes.as_slice() != o_bytes_slice { // Compare Vec<u8> with &[u8]
         return Err("O_bytes in ESK does not match derivation from seedsk in ESK");
     }
@@ -141,7 +142,7 @@ pub fn sign_message(esk: &ExpandedSecretKey, message: &Message, params_enum: &Ma
     
     // P2 and P3 are not in esk, they are derived from seedpk.
     let p2_all_bytes_from_seedpk = derive_p2_bytes(&seedpk, params);
-    let p3_all_bytes_from_seedpk = shake256_xof_derive_p3(&seedpk, params);
+    let p3_all_bytes_from_seedpk = shake256_xof_derive_p3(&seedpk, params_enum);
 
     let p2_matrices = decode_p2_matrices(&p2_all_bytes_from_seedpk, params)?;
     let p3_matrices = decode_p3_matrices(&p3_all_bytes_from_seedpk, params)?;
@@ -152,7 +153,7 @@ pub fn sign_message(esk: &ExpandedSecretKey, message: &Message, params_enum: &Ma
 
 
     // 2. Hash message M to M_digest
-    let m_digest = shake256_digest(&message.0, params);
+    let m_digest = shake256_digest(&message.0, params_enum);
 
     for _retry_count in 0..MAX_SIGN_RETRIES {
         // 3. Sample salt
@@ -161,7 +162,7 @@ pub fn sign_message(esk: &ExpandedSecretKey, message: &Message, params_enum: &Ma
         let salt = Salt(salt_bytes_vec);
 
         // 4. Derive target vector t
-        let t_bytes = shake256_derive_target_t(&m_digest, &salt, params);
+        let t_bytes = shake256_derive_target_t(&m_digest, &salt, params_enum);
         let t_vector = decode_gf_elements(&t_bytes, params.m)?;
 
         // 5. Sample random vinegar variables (n-o variables)
@@ -257,7 +258,7 @@ mod tests {
         // A more specific error than the placeholder is expected now.
         match sign_result {
             Ok(sig) => {
-                let expected_sig_len = params_enum.bytes_for_gf16_elements(params_variant.n) + params_variant.salt_bytes;
+                let expected_sig_len = MayoParams::bytes_for_gf16_elements(params_variant.n) + params_variant.salt_bytes;
                 assert_eq!(sig.0.len(), expected_sig_len, "Signature length is incorrect");
             },
             Err(e) => {
@@ -277,7 +278,7 @@ mod tests {
         let sign_result = sign_message(&esk, &message, &params_enum);
         match sign_result {
             Ok(sig) => {
-                let expected_sig_len = params_enum.bytes_for_gf16_elements(params_variant.n) + params_variant.salt_bytes;
+                let expected_sig_len = MayoParams::bytes_for_gf16_elements(params_variant.n) + params_variant.salt_bytes;
                 assert_eq!(sig.0.len(), expected_sig_len, "Signature length is incorrect");
             },
             Err(e) => {

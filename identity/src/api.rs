@@ -10,29 +10,29 @@ use crate::verify::verify_signature;
 /// Generates a compact key pair (secret key, public key) for the specified MAYO variant.
 /// This wraps `MAYO.CompactKeyGen`.
 #[wasm_bindgen]
-pub fn keypair(params_enum: &MayoParams) -> Result<(CompactSecretKey, CompactPublicKey), &'static str> {
-    compact_key_gen(params_enum)
+pub fn keypair(params_enum: &MayoParams) -> Result<(CompactSecretKey, CompactPublicKey), String> {
+    compact_key_gen(params_enum).map_err(|e| e.to_string())
 }
 
 /// Signs a message using a compact secret key.
 /// This involves expanding the secret key and then calling `MAYO.Sign`.
 /// The returned signature does not include the message.
 #[wasm_bindgen]
-pub fn sign(csk: &CompactSecretKey, message: &Message, params_enum: &MayoParams) -> Result<Signature, &'static str> {
+pub fn sign(csk: &CompactSecretKey, message: &Message, params_enum: &MayoParams) -> Result<Signature, String> {
     // Note: The problem description mentions ExpandedSecretKey is not used by sign.
     // However, the provided function signature for sign_message in sign.rs *does* take ExpandedSecretKey.
     // Algorithm 8 (MAYO.Sign) takes esk as input.
     // Algorithm 3 (NIST API Sign) takes sk (csk) as input, implying internal expansion.
     // So, expanding sk to esk here is correct.
-    let esk: ExpandedSecretKey = expand_sk(csk, params_enum)?;
-    sign_message(&esk, message, params_enum)
+    let esk: ExpandedSecretKey = expand_sk(csk, params_enum).map_err(|e| e.to_string())?;
+    sign_message(&esk, message, params_enum).map_err(|e| e.to_string())
 }
 
 /// Verifies a signature on a "signed message" and recovers the original message if valid.
 /// This corresponds to `sign_open` in some APIs.
 /// Assumes `signed_message` is `signature_bytes || original_message_bytes`.
 #[wasm_bindgen]
-pub fn open(cpk: &CompactPublicKey, signed_message: &[u8], params_enum: &MayoParams) -> Result<Option<Message>, &'static str> {
+pub fn open(cpk: &CompactPublicKey, signed_message: &[u8], params_enum: &MayoParams) -> Result<Option<Message>, String> {
     let params = params_enum.variant();
     
     // Determine signature length: s_bytes_len (n elements) + salt_bytes
@@ -40,7 +40,7 @@ pub fn open(cpk: &CompactPublicKey, signed_message: &[u8], params_enum: &MayoPar
     let expected_sig_len = s_bytes_len + params.salt_bytes;
 
     if signed_message.len() < expected_sig_len {
-        return Err("Signed message is too short to contain a signature");
+        return Err("Signed message is too short to contain a signature".to_string());
     }
 
     let sig_bytes = &signed_message[0..expected_sig_len];
@@ -54,12 +54,12 @@ pub fn open(cpk: &CompactPublicKey, signed_message: &[u8], params_enum: &MayoPar
     // Algorithm 9 (MAYO.Verify) takes epk as input.
     // Algorithm 4 (NIST API Verify/Open) takes pk (cpk) as input, implying internal expansion.
     // So, expanding pk to epk here is correct.
-    let epk: ExpandedPublicKey = expand_pk(cpk, params_enum)?;
+    let epk: ExpandedPublicKey = expand_pk(cpk, params_enum).map_err(|e| e.to_string())?;
     
     match verify_signature(&epk, &original_message, &signature, params_enum) {
         Ok(true) => Ok(Some(original_message)), // Valid signature, return message
         Ok(false) => Ok(None),                  // Invalid signature
-        Err(e) => Err(e),                       // Error during verification
+        Err(e) => Err(e.to_string()),                       // Error during verification
     }
 }
 
@@ -100,7 +100,7 @@ mod tests {
         // Since sign_message -> compute_Y_A_yprime_and_s_components is a placeholder returning Err,
         // we expect that specific error from sign_message.
         match sign_result {
-            Err(e) => assert_eq!(e, "MAYO.Sign math core (compute_Y_A_yprime_and_s_components) not implemented"),
+            Err(e) => assert_eq!(e, "MAYO.Sign math core (compute_Y_A_yprime_and_s_components) not implemented".to_string()),
             Ok(_) => panic!("API sign should fail due to placeholder in sign_message"),
         }
     }
@@ -127,7 +127,7 @@ mod tests {
         // Since verify_signature -> compute_p_star_s is a placeholder returning Err,
         // we expect that specific error from verify_signature.
         match open_result {
-            Err(e) => assert_eq!(e, "MAYO.Verify math core (compute_p_star_s) not implemented"),
+            Err(e) => assert_eq!(e, "MAYO.Verify math core (compute_p_star_s) not implemented".to_string()),
             Ok(_) => panic!("API open should fail due to placeholder in verify_signature"),
         }
     }
@@ -143,7 +143,7 @@ mod tests {
         let short_signed_message = vec![0u8; expected_sig_len - 1];
         
         let open_result = open(&cpk, &short_signed_message, &params_enum);
-        assert_eq!(open_result, Err("Signed message is too short to contain a signature"));
+        assert_eq!(open_result, Err("Signed message is too short to contain a signature".to_string()));
     }
     
     // Conceptual test for open with tampered data (depends on functional sign & verify)

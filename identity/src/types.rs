@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-use crate::params::MayoParams; // For potential use with fixed-size arrays later
+// use crate::params::MayoParams; // Removed as per compiler warning
 
 // Field element for GF(16), represented as a nibble in a u8.
 // The actual value should be in the lower 4 bits.
@@ -56,7 +56,7 @@ pub struct SeedPK(pub Vec<u8>);
 
 /// CompactSecretKey is typically the same as SeedSK.
 #[wasm_bindgen]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)] // Removed Copy
 pub struct CompactSecretKey(pub Vec<u8>); // Represents SeedSK
 
 #[wasm_bindgen]
@@ -73,7 +73,7 @@ impl CompactSecretKey {
 
 /// CompactPublicKey typically contains SeedPK and a representation of P3 (or its hash).
 #[wasm_bindgen]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)] // Removed Copy
 pub struct CompactPublicKey(pub Vec<u8>); // Represents SeedPK || P3_bytes or similar
 
 #[wasm_bindgen]
@@ -90,26 +90,17 @@ impl CompactPublicKey {
 
 /// ExpandedSecretKey contains the full secret key components derived from SeedSK.
 /// This would include S, P1, P2, P3 (or their components).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExpandedSecretKey {
-    // Placeholder: these would be more structured, e.g., containing seeds, matrices
-    pub s_sk: SeedSK, // Original seed
-    // P1, P2, P3 matrices, or components used to generate them
-    // S matrix (secret linear map)
-}
+#[derive(Debug, Clone, PartialEq, Eq)] // Ensure no Copy
+pub struct ExpandedSecretKey(pub Vec<u8>);
 
 /// ExpandedPublicKey contains the full public key components derived from SeedPK.
 /// This would include P1, P2, P3 (or parts of them, or their public representation).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExpandedPublicKey {
-    // Placeholder:
-    pub s_pk: SeedPK, // Original seed
-    // Public matrices P1, P2, P3 (or their relevant parts)
-}
+#[derive(Debug, Clone, PartialEq, Eq)] // Ensure no Copy
+pub struct ExpandedPublicKey(pub Vec<u8>);
 
 /// Signature containing the solution `s` and the salt.
 #[wasm_bindgen]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)] // Removed Copy
 pub struct Signature(pub Vec<u8>); // Represents s_bytes || salt
 
 #[wasm_bindgen]
@@ -125,7 +116,7 @@ impl Signature {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)] // Removed Copy
 pub struct Message(pub Vec<u8>);
 
 #[wasm_bindgen]
