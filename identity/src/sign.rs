@@ -9,9 +9,12 @@ use crate::hash::{shake256_digest, shake256_derive_target_t, shake256_xof_derive
 use crate::aes_ctr::{derive_p1_bytes, derive_p2_bytes};
 use crate::codec::{
     decode_o_matrix, decode_p1_matrices, decode_p2_matrices, decode_l_matrices,
-    decode_gf_elements, encode_s_vector // encode_gf_elements is used by encode_s_vector
+    decode_gf_elements, encode_s_vector
 };
-use crate::matrix::{GFMatrix, matrix_sub_vectors_gfvector}; // matrix_sub_vectors_gfvector was added to matrix.rs
+use crate::matrix::{
+    GFMatrix, matrix_sub_vectors_gfvector, matrix_symmetrize, 
+    matrix_vec_mul_transpose_gfvector, vector_dot_product
+};
 use crate::solver::solve_linear_system;
 use getrandom::getrandom;
 
@@ -32,30 +35,63 @@ const MAX_SIGN_RETRIES: usize = 256;
 ///
 /// # Returns
 /// `Ok((GFMatrix /*A (m x o)*/, GFVector /*y_prime (m elements)*/))` or an error.
-#[allow(unused_variables)] // Temporarily allow unused for placeholder
-fn compute_Y_A_yprime_and_s_components(
-    vinegar_vars: &GFVector,
-    o_matrix: &GFMatrix,
-    p1_matrices: &[GFMatrix], 
-    p2_matrices: &[GFMatrix], 
-    p3_matrices: &[GFMatrix],
-    l_matrices: &[GFMatrix], // L matrices are derived from O, P1, P2 in ExpandSK.
-                             // For signing, they are part of esk.
+fn compute_lin_system_components(
+    vinegar_vars: &GFVector,        // s_V, length n-o
+    p1_mats: &[GFMatrix],           // Source for P_i^1, m of them, each (n-o)x(n-o)
+    l_mats: &[GFMatrix],            // P_i^2, m of them, each (n-o)xo
     params: &MayoVariantParams
 ) -> Result<(GFMatrix /*A*/, GFVector /*y_prime*/), &'static str> {
-    // TODO: Implement the actual MAYO cryptographic calculations.
-    // This involves evaluating parts of the MQ map F with the given vinegar variables
-    // to linearize the system into the form Ax = y_target - y_prime_offset.
-    // - y_prime_offset_i = sum_{j,k} v_j v_k P1_i_jk + sum_j v_j L_i_j. (schematically)
-    // - A_ij = sum_k v_k (P1_i_jk + P1_i_kj) + P2_i_ij (schematically, from (P1+P1T)v + P2)
-    // The L matrices are used in y_prime. P1, P2, O are used for A. P3 is used for y_prime.
+    
+    let num_vinegar_vars = params.n - params.o;
+    let num_oil_vars = params.o;
+    let m = params.m;
 
-    // For now, returning an error to indicate it's a placeholder.
-    // To allow flow testing, one might return dummy A and y_prime of correct dimensions:
-    // let a_matrix = GFMatrix::zero(params.m, params.o);
-    // let y_prime_vector = vec![GFElement(0); params.m];
-    // Ok((a_matrix, y_prime_vector))
-    Err("compute_Y_A_yprime_and_s_components: Not yet implemented")
+    if vinegar_vars.len() != num_vinegar_vars {
+        return Err("Vinegar variables vector has incorrect length");
+    }
+    if p1_mats.len() != m {
+        return Err("Incorrect number of P1 matrices");
+    }
+    if l_mats.len() != m {
+        return Err("Incorrect number of L matrices");
+    }
+
+    let mut y_prime_elements = Vec::with_capacity(m);
+    let mut a_matrix_rows_as_vectors: Vec<GFVector> = Vec::with_capacity(m);
+
+    for i in 0..m {
+        let p1_i = &p1_mats[i];
+        if p1_i.num_rows() != num_vinegar_vars || p1_i.num_cols() != num_vinegar_vars {
+            return Err("P1 matrix has incorrect dimensions");
+        }
+        
+        // y_prime_i = s_V^T * P_i^1_symmetric * s_V
+        // P_i^1_symmetric = P1_i + P1_i^T
+        let p1_i_symmetric = matrix_symmetrize(p1_i)?; // M + M^T
+        // temp_y_vec = s_V^T * P_i^1_symmetric
+        let temp_y_vec = matrix_vec_mul_transpose_gfvector(vinegar_vars, &p1_i_symmetric)?;
+        // y_prime_i = temp_y_vec * s_V
+        let y_prime_i = vector_dot_product(&temp_y_vec, vinegar_vars)?;
+        y_prime_elements.push(y_prime_i);
+
+        // A_row_i = s_V^T * P_i^2
+        // P_i^2 is l_mats[i]
+        let l_i = &l_mats[i]; // (n-o) x o
+        if l_i.num_rows() != num_vinegar_vars || l_i.num_cols() != num_oil_vars {
+            return Err("L matrix has incorrect dimensions");
+        }
+        let a_row_i = matrix_vec_mul_transpose_gfvector(vinegar_vars, l_i)?; // (1 x (n-o)) * ((n-o) x o) = (1 x o)
+        a_matrix_rows_as_vectors.push(a_row_i);
+    }
+    
+    // Construct A matrix from its rows
+    let a_matrix = GFMatrix::from_vectors(a_matrix_rows_as_vectors); // from_vectors checks for consistent row lengths
+    if a_matrix.num_rows() != m || a_matrix.num_cols() != num_oil_vars {
+        // This check should ideally be redundant if from_vectors is correct and inputs were okay
+        return Err("Constructed A matrix has incorrect dimensions");
+    }
+
+    Ok((a_matrix, y_prime_elements))
 }
 
 
@@ -139,15 +175,18 @@ pub fn sign_message(esk: &ExpandedSecretKey, message: &Message, params_enum: &Ma
         let vinegar_vars = vinegar_vars_vec;
 
         // 6. Compute matrix A (m x o) and vector y_prime (m elements)
-        let (a_matrix, y_prime_vector) = match compute_Y_A_yprime_and_s_components(
-            &vinegar_vars, &o_matrix, &p1_matrices, &p2_matrices, &p3_matrices, &l_matrices, params
+        // Note: P2 and P3 matrices are not directly used by compute_lin_system_components
+        // under the current interpretation. o_matrix is also not used.
+        let (a_matrix, y_prime_vector) = match compute_lin_system_components(
+            &vinegar_vars, &p1_matrices, &l_matrices, params
         ) {
             Ok(res) => res,
-            Err(e) if e == "compute_Y_A_yprime_and_s_components: Not yet implemented" => {
-                // For now, if placeholder, return error to indicate it's not done
-                return Err("MAYO.Sign math core (compute_Y_A_yprime_and_s_components) not implemented");
-            }
-            Err(e) => return Err(e), // Other errors from it
+            // If compute_lin_system_components is the one returning "Not yet implemented", update this.
+            // However, we are now implementing it.
+            // Err(e) if e == "compute_Y_A_yprime_and_s_components: Not yet implemented" => {
+            //     return Err("MAYO.Sign math core (compute_Y_A_yprime_and_s_components) not implemented");
+            // }
+            Err(e) => return Err(e), 
         };
 
         // 7. Solve Ax = t - y_prime for x (o elements - oil variables)
@@ -205,29 +244,46 @@ mod tests {
     #[test]
     fn test_sign_message_flow_mayo1() {
         let params_enum = MayoParams::mayo1();
+        let params_variant = params_enum.variant();
         let esk = create_dummy_esk(&params_enum);
         let message = Message(b"test message".to_vec());
 
         let sign_result = sign_message(&esk, &message, &params_enum);
         
-        // Since compute_Y_A_yprime_and_s_components is a placeholder returning Err,
-        // we expect that specific error.
+        // With compute_lin_system_components implemented, we expect either Ok (if solvable by chance)
+        // or Err from solver or "MAYO.Sign failed after maximum retries".
+        // For this test, we are checking that it doesn't panic and proceeds past component computation.
+        // If it returns Ok, A and y_prime were computed with correct dimensions.
+        // A more specific error than the placeholder is expected now.
         match sign_result {
-            Err(e) => assert_eq!(e, "MAYO.Sign math core (compute_Y_A_yprime_and_s_components) not implemented"),
-            Ok(_) => panic!("Sign should fail due to placeholder math core"),
+            Ok(sig) => {
+                let expected_sig_len = params_enum.bytes_for_gf16_elements(params_variant.n) + params_variant.salt_bytes;
+                assert_eq!(sig.0.len(), expected_sig_len, "Signature length is incorrect");
+            },
+            Err(e) => {
+                assert!(e == "MAYO.Sign failed after maximum retries" || e.starts_with("Solver error"), 
+                        "Expected sign failure or solver error, got: {}", e);
+            }
         }
     }
 
     #[test]
     fn test_sign_message_flow_mayo2() {
         let params_enum = MayoParams::mayo2();
+        let params_variant = params_enum.variant();
         let esk = create_dummy_esk(&params_enum);
         let message = Message(b"another test message".to_vec());
 
         let sign_result = sign_message(&esk, &message, &params_enum);
         match sign_result {
-            Err(e) => assert_eq!(e, "MAYO.Sign math core (compute_Y_A_yprime_and_s_components) not implemented"),
-            Ok(_) => panic!("Sign should fail due to placeholder math core"),
+            Ok(sig) => {
+                let expected_sig_len = params_enum.bytes_for_gf16_elements(params_variant.n) + params_variant.salt_bytes;
+                assert_eq!(sig.0.len(), expected_sig_len, "Signature length is incorrect");
+            },
+            Err(e) => {
+                assert!(e == "MAYO.Sign failed after maximum retries" || e.starts_with("Solver error"), 
+                        "Expected sign failure or solver error, got: {}", e);
+            }
         }
     }
     

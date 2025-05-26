@@ -204,6 +204,63 @@ pub fn matrix_sub_vectors_gfvector(a: &GFVector, b: &GFVector) -> Result<GFVecto
     Ok(result)
 }
 
+/// Symmetrizes a square matrix M by computing M + M^T.
+/// In characteristic 2, (M+M^T)[i,i] = M[i,i]+M[i,i] = 0.
+/// Off-diagonal elements are M[i,j]+M[j,i].
+/// If M is upper triangular, M_sym[i,i]=M[i,i], M_sym[i,j]=M[i,j] for i<j, M_sym[j,i]=M[i,j] for j<i.
+/// This function computes M_sym = M + M^T directly.
+pub fn matrix_symmetrize(matrix: &GFMatrix) -> Result<GFMatrix, &'static str> {
+    if matrix.num_rows() != matrix.num_cols() {
+        return Err("Matrix must be square to be symmetrized");
+    }
+    let n = matrix.num_rows();
+    let mut sym_matrix = GFMatrix::zero(n, n);
+    for r in 0..n {
+        for c in 0..n {
+            // M_sym[r,c] = M[r,c] + M[c,r]
+            let val = gf16_add(matrix.get_unsafe(r,c), matrix.get_unsafe(c,r));
+            sym_matrix.set_val(r,c, val);
+        }
+    }
+    Ok(sym_matrix)
+}
+
+
+/// Multiplies a row vector (transpose of GFVector) by a matrix: v^T * M.
+/// vector_lhs is treated as a 1xN row vector. matrix_rhs is NxK. Result is 1xK (GFVector).
+pub fn matrix_vec_mul_transpose_gfvector(vector_lhs: &GFVector, matrix_rhs: &GFMatrix) -> Result<GFVector, &'static str> {
+    if vector_lhs.len() != matrix_rhs.num_rows() {
+        return Err("Vector length must match matrix rows for v^T * M multiplication");
+    }
+    let num_cols_result = matrix_rhs.num_cols();
+    let mut result_vector = vec![GFElement(0); num_cols_result];
+
+    for c_res in 0..num_cols_result { // For each column in the result vector (and matrix_rhs)
+        let mut sum = GFElement(0);
+        for r_m_idx in 0..matrix_rhs.num_rows() { // Summing down the column of matrix_rhs
+            sum = gf16_add(sum, gf16_mul(vector_lhs[r_m_idx], matrix_rhs.get_unsafe(r_m_idx, c_res)));
+        }
+        result_vector[c_res] = sum;
+    }
+    Ok(result_vector)
+}
+
+/// Computes the dot product of two vectors: a^T * b.
+pub fn vector_dot_product(a: &GFVector, b: &GFVector) -> Result<GFElement, &'static str> {
+    if a.len() != b.len() {
+        return Err("Vectors must have the same length for dot product");
+    }
+    if a.is_empty() { // Or b.is_empty(), since lengths must match
+        return Ok(GFElement(0)); // Dot product of empty vectors is 0
+    }
+    let mut sum = GFElement(0);
+    for i in 0..a.len() {
+        sum = gf16_add(sum, gf16_mul(a[i], b[i]));
+    }
+    Ok(sum)
+}
+
+
 // --- Unit Tests ---
 #[cfg(test)]
 mod tests {
@@ -212,6 +269,73 @@ mod tests {
     // Helper to create GFVector from Vec<GFElement> for tests in this module
     fn vec_gf(data: Vec<GFElement>) -> GFVector { data }
 
+
+    #[test]
+    fn test_matrix_symmetrize() {
+        // Test with an upper triangular matrix
+        // U = [[1,2,3],
+        //      [0,4,5],
+        //      [0,0,6]]
+        let u_data = vec![gf(1),gf(2),gf(3), gf(0),gf(4),gf(5), gf(0),gf(0),gf(6)];
+        let u_matrix = GFMatrix::new_with_data(3,3, u_data);
+        
+        // S = U + U^T
+        // S[0,0] = 1+1=0. S[1,1]=4+4=0. S[2,2]=6+6=0.
+        // S[0,1] = U[0,1]+U[1,0] = 2+0=2. S[1,0]=S[0,1]=2.
+        // S[0,2] = U[0,2]+U[2,0] = 3+0=3. S[2,0]=S[0,2]=3.
+        // S[1,2] = U[1,2]+U[2,1] = 5+0=5. S[2,1]=S[1,2]=5.
+        // Expected S = [[0,2,3],
+        //               [2,0,5],
+        //               [3,5,0]]
+        let expected_s_data = vec![gf(0),gf(2),gf(3), gf(2),gf(0),gf(5), gf(3),gf(5),gf(0)];
+        let s_matrix = matrix_symmetrize(&u_matrix).unwrap();
+        assert_eq!(s_matrix.data, expected_s_data);
+
+        // Test with a non-square matrix (should err)
+        let non_square = GFMatrix::zero(2,3);
+        assert!(matrix_symmetrize(&non_square).is_err());
+
+        // Test with an already symmetric matrix
+        // M = [[1,2],[2,3]] -> M+M^T = [[0,0],[0,0]]
+        let m_sym_data = vec![gf(1),gf(2), gf(2),gf(3)];
+        let m_sym = GFMatrix::new_with_data(2,2, m_sym_data);
+        let expected_zero_data = vec![gf(0),gf(0), gf(0),gf(0)];
+        assert_eq!(matrix_symmetrize(&m_sym).unwrap().data, expected_zero_data);
+    }
+
+    #[test]
+    fn test_matrix_vec_mul_transpose_gfvector() {
+        // v^T = [1, 2, 3] (1x3)
+        // M   = [[1, 4],  (3x2)
+        //        [2, 5],
+        //        [3, 6]]
+        // v^T * M = [ (1*1 + 2*2 + 3*3), (1*4 + 2*5 + 3*6) ]
+        //         = [ (1^4^5), (4^A^2) ] (using 3*3=5, 2*5=A, 3*6=A^4=2)
+        //         = [ (0), (4^A=E ^2 = C) ] = [0, C]
+        let v = vec_gf(vec![gf(1), gf(2), gf(3)]);
+        let m_data = vec![gf(1),gf(4), gf(2),gf(5), gf(3),gf(6)];
+        let m = GFMatrix::new_with_data(3,2,m_data);
+        let expected = vec_gf(vec![gf(0), gf(0xC)]);
+        assert_eq!(matrix_vec_mul_transpose_gfvector(&v, &m).unwrap(), expected);
+
+        let v_short = vec_gf(vec![gf(1), gf(2)]);
+        assert!(matrix_vec_mul_transpose_gfvector(&v_short, &m).is_err());
+    }
+
+    #[test]
+    fn test_vector_dot_product() {
+        let v1 = vec_gf(vec![gf(1), gf(2), gf(3)]);
+        let v2 = vec_gf(vec![gf(4), gf(5), gf(6)]);
+        // 1*4 + 2*5 + 3*6 = 4 ^ A ^ (A^4=2) = 4^A=E ^2 = C
+        assert_eq!(vector_dot_product(&v1, &v2).unwrap(), gf(0xC));
+        
+        let v_empty1 = vec_gf(vec![]);
+        let v_empty2 = vec_gf(vec![]);
+        assert_eq!(vector_dot_product(&v_empty1, &v_empty2).unwrap(), gf(0));
+
+        let v_short = vec_gf(vec![gf(1)]);
+        assert!(vector_dot_product(&v1, &v_short).is_err());
+    }
 
     #[test]
     fn test_matrix_constructors_and_getters() {
