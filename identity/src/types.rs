@@ -55,7 +55,7 @@ pub struct SeedSK(pub Vec<u8>);
 pub struct SeedPK(pub Vec<u8>);
 
 /// CompactSecretKey is typically the same as SeedSK.
-#[wasm_bindgen]
+#[wasm_bindgen(getter_with_clone)]
 #[derive(Debug, Clone, PartialEq, Eq)] // Removed Copy
 pub struct CompactSecretKey(pub Vec<u8>); // Represents SeedSK
 
@@ -72,7 +72,7 @@ impl CompactSecretKey {
 }
 
 /// CompactPublicKey typically contains SeedPK and a representation of P3 (or its hash).
-#[wasm_bindgen]
+#[wasm_bindgen(getter_with_clone)]
 #[derive(Debug, Clone, PartialEq, Eq)] // Removed Copy
 pub struct CompactPublicKey(pub Vec<u8>); // Represents SeedPK || P3_bytes or similar
 
@@ -99,7 +99,7 @@ pub struct ExpandedSecretKey(pub Vec<u8>);
 pub struct ExpandedPublicKey(pub Vec<u8>);
 
 /// Signature containing the solution `s` and the salt.
-#[wasm_bindgen]
+#[wasm_bindgen(getter_with_clone)]
 #[derive(Debug, Clone, PartialEq, Eq)] // Removed Copy
 pub struct Signature(pub Vec<u8>); // Represents s_bytes || salt
 
@@ -115,7 +115,7 @@ impl Signature {
     }
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(getter_with_clone)]
 #[derive(Debug, Clone, PartialEq, Eq)] // Removed Copy
 pub struct Message(pub Vec<u8>);
 

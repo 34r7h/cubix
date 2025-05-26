@@ -109,6 +109,15 @@ impl MayoParams {
     pub fn p1_bytes(&self) -> usize { self.variant().p1_bytes }
     pub fn p2_bytes(&self) -> usize { self.variant().p2_bytes }
     pub fn p3_bytes(&self) -> usize { self.variant().p3_bytes }
+
+    pub fn get_params_by_name(name: &str) -> Result<MayoParams, String> {
+        match name.to_lowercase().as_str() {
+            "mayo1" => Ok(MayoParams::mayo1()),
+            "mayo2" => Ok(MayoParams::mayo2()),
+            // Add other variants if they exist in the future
+            _ => Err(format!("Unknown MAYO variant name: {}", name)),
+        }
+    }
 }
 
 // Example usage:
