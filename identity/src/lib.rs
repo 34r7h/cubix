@@ -1,31 +1,36 @@
-use wasm_bindgen::prelude::*;
-use mayo::{Keypair, PublicKey, SecretKey, Signature};
-use blake2::{Blake2b512, Digest};
+use wasm_bindgen::prelude::*; // Keep for future Wasm compatibility
+use blake2::{Blake2b512, Digest}; // Keep for now, might be used for hashing in MAYO
 
-#[wasm_bindgen]
-pub fn generate_keypair() -> (PublicKey, SecretKey) {
-    let keypair = Keypair::generate();
-    (keypair.public, keypair.secret)
+pub mod params;
+pub mod types;
+pub mod hash;
+pub mod aes_ctr;
+pub mod gf;
+pub mod matrix;
+pub mod codec;
+pub mod keygen;
+pub mod solver;
+pub mod sign;
+pub mod verify;
+
+pub mod api;
+pub use api::{keypair, sign, open};
+
+pub mod spacetime_hash;
+pub use spacetime_hash::hash_compact_secret_key;
+
+// Placeholder for any top-level library functions or re-exports if needed in the future.
+
+// The old Mayo functions (generate_keypair, sign_message, verify_signature, hash_secret_key)
+// and their associated tests have been removed as they were based on an incorrect 'mayo' crate.
+// New implementations will be based on the structures in `params.rs` and `types.rs`.
+
+#[cfg(test)]
+mod tests {
+    // TODO: Add new tests specific to the new params and types,
+    // and eventually the actual MAYO cryptographic operations.
+    #[test]
+    fn it_works_stub() {
+        assert_eq!(2 + 2, 4);
+    }
 }
-
-#[wasm_bindgen]
-pub fn sign_message(secret_key: &SecretKey, message: &[u8]) -> Signature {
-    secret_key.sign(message)
-}
-
-#[wasm_bindgen]
-pub fn verify_signature(public_key: &PublicKey, message: &[u8], signature: &Signature) -> bool {
-    public_key.verify(message, signature)
-}
-
-#[wasm_bindgen]
-pub fn hash_secret_key(secret_key: &SecretKey) -> Vec<u8> {
-    let key_bytes = secret_key.to_bytes(); // Assuming this method exists and returns &[u8] or Vec<u8>
-    let mut hasher = Blake2b512::new();
-    hasher.update(key_bytes);
-    hasher.finalize().to_vec()
-}
-
-// The add function and tests are removed as they are not part of the identity library's core functionality.
-// If they were intended to be kept, they should be moved to a relevant module or kept if this is a multi-purpose library.
-// For now, assuming a clean slate for the identity-specific code.
