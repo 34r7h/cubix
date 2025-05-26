@@ -144,11 +144,11 @@ pub fn sign_message(esk: &ExpandedSecretKey, message: &Message, params_enum: &Ma
     let p2_all_bytes_from_seedpk = derive_p2_bytes(&seedpk, params);
     let p3_all_bytes_from_seedpk = shake256_xof_derive_p3(&seedpk, params_enum);
 
-    let p2_matrices = decode_p2_matrices(&p2_all_bytes_from_seedpk, params)?;
-    let p3_matrices = decode_p3_matrices(&p3_all_bytes_from_seedpk, params)?;
+    let _p2_matrices = decode_p2_matrices(&p2_all_bytes_from_seedpk, params)?; // Prefixed
+    let _p3_matrices = decode_p3_matrices(&p3_all_bytes_from_seedpk, params)?; // Prefixed
     
     // O and L matrices are from esk.
-    let o_matrix = decode_o_matrix(o_bytes_slice, params)?;
+    let _o_matrix = decode_o_matrix(o_bytes_slice, params)?; // Prefixed
     let l_matrices = decode_l_matrices(l_all_bytes_slice, params)?;
 
 
